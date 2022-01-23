@@ -1,0 +1,73 @@
+- hosts: blog_nodes
+  become: yes
+  vars:
+    WP_URL: https://wordpress.org/latest.tar.gz
+    EPEL_REPO_URL: https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+    REMI_REPO_URL: https://rpms.remirepo.net/enterprise/remi-release-7.rpm
+    DB_NAME: blog
+    DB_USER: blog
+    DB_PASS: blog!
+  tasks:
+    - name: "Install apache server"
+      yum:
+        name: httpd
+        state: present
+    - name: "Copy apache conf files"
+      copy:
+        src: files/httpd-vhosts.conf
+        dest: /etc/httpd/conf.d/blog.conf
+    - name: "Extract WP installation"
+      unarchive:
+        src: "{{ WP_URL }}"
+        dest: /var/www
+        remote_src: yes
+    - name: "Install EPEL repo"
+      yum:
+        name: "{{ EPEL_REPO_URL }}"
+        state: present
+    - name: "Install PHP repo"
+      yum:
+        name: "{{ REMI_REPO_URL }}"
+        state: present
+    - name: "Install PHP packages"
+      yum:
+        name:
+          - php80
+          - php80-php
+          - php80-php-mysqlnd 
+          - php80-php-pecl-mysql
+        state: present
+    - name: "Put MariaDB repo config"
+      copy:
+        src: files/mariadb.repo
+        dest: /etc/yum.repos.d/Mariadb.repo
+    - name: "Install MariaDB server"
+      yum:
+        name:
+          - MariaDB-server
+          - MariaDB-client
+          - MySQL-python
+    - name: "Start MariaDB server"
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
+    - name: "Create db"
+      mysql_db:
+        name: "{{ DB_NAME }}"
+        state: present
+    - name: "Create user and grand privileges"
+      mysql_user:
+        name: "{{ DB_USER }}"
+        password: "{{ DB_PASS }}"
+        priv: "{{ DB_NAME }}.*:ALL"
+        state: present
+    - name: "Put WP config"
+      template:
+        src: files/wp-config.php
+        dest: /var/www/wordpress/wp-config.php
+    - name: "Restart apache server"
+      service:
+        name: httpd
+        state: restarted
+        enabled: yes
